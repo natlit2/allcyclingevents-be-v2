@@ -1,128 +1,135 @@
+// ADFC Berlin guided cycling tours scraper
+// Scrapes https://touren-termine.adfc.de for Berlin cycling tours
 const puppeteer = require("puppeteer");
 const Event = require("../models/eventModel");
 const connectDB = require("../dbinit");
 const moment = require("moment");
-const document = require("puppeteer");
-// startup puppeteer
 
-async function scrapeAllEvents(url) {
-  connectDB();
+// Berlin ADFC unit key is 154
+const ADFC_URL = () => {
+  const now = moment(new Date()).format("YYYY/MM/DD");
+  return `https://touren-termine.adfc.de/suche?beginning=${now}&eventType=Radtour&includeSubsidiary=true&unitKey=154`;
+};
+
+// Windows-compatible puppeteer launch options
+const PUPPETEER_OPTS = {
+  headless: true,
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+  ],
+};
+
+async function scrapeAllEvents() {
+  await connectDB();
+  let browser;
   try {
-    const browser = await puppeteer.launch();
+    console.log("ADFC scraper: launching browser...");
+    browser = await puppeteer.launch(PUPPETEER_OPTS);
     const page = await browser.newPage();
-    await page.goto(url);
-    await page.waitForSelector(".list-group", { visible: true });
+    await page.setDefaultNavigationTimeout(60000);
+    await page.goto(ADFC_URL(), { waitUntil: "networkidle2" });
+
+    await page.waitForSelector(".list-group", { visible: true, timeout: 30000 });
+
     const eventLinks = await page.evaluate(() => {
       const listGroup = document.querySelectorAll(".list-group a");
-      console.log(listGroup);
-      let links = [];
+      const links = [];
       for (const link of listGroup) {
         links.push(link.getAttribute("href"));
       }
       return links;
     });
 
-    //console.log(eventLinks);
+    console.log("ADFC scraper: found " + eventLinks.length + " event links");
 
-    for await (const eventLink of eventLinks) {
-      const baseURL = "https://touren-termine.adfc.de";
+    for (const eventLink of eventLinks) {
+      const baseURL = "https://touren-terme.adfc.de";
       const fullEventLink = baseURL + eventLink;
       const eventPage = await browser.newPage();
-      console.log(`Full Event Link: ${fullEventLink}`);
-      await eventPage.goto(fullEventLink);
+      try {
+        await eventPage.setDefaultNavigationTimeout(60000);
+        await eventPage.goto(fullEventLink, { waitUntil: "networkidle2" });
 
-      //scrape the title
-      await eventPage.waitForSelector("h1", {
-        visible: true,
-      });
-      const titleEl = await eventPage.evaluate(() => {
-        const selectTitleEl = document.querySelector("h1").innerText;
-        return selectTitleEl;
-      });
-      console.log(`THE EVENT TILTE IS: ${titleEl}`);
+        await eventPage.waitForSelector("h1", { visible: true, timeout: 15000 });
+        const titleEl = await eventPage.evaluate(() => {
+          const el = document.querySelector("h1");
+          return el ? el.innerText.trim() : null;
+        });
+        if (!titleEl) {
+          console.log("ADFC scraper: no title found, skipping");
+          await eventPage.close();
+          continue;
+        }
+        console.log("ADFC: title = " + titleEl);
 
-      const dateElement = await eventPage.evaluate(() => {
-        const selectDateElement = document.querySelectorAll("dd")[1].innerText;
-        return selectDateElement;
-      });
-      console.log(`The Event Date is: ${dateElement}`);
+        const dateElement = await eventPage.evaluate(() => {
+          const dds = document.querySelectorAll("dd");
+          return dds[1] ? dds[1].innerText.trim() : null;
+        });
+        if (!dateElement) {
+          console.log("ADFC scraper: no date found, skipping");
+          await eventPage.close();
+          continue;
+        }
+        console.log("ADFC: date = " + dateElement);
 
-      //Make sure to parse and reformat the date before saving to the DB
-      //get the date from the Event element take only what you need and reformat it with moment
-      // Destructure date here
-      //Split the date
-      const destructuredDateArr = dateElement.split(". ");
-      const destDateArrStartTime = destructuredDateArr[2].split(" - ");
-      //console.log(`the destructured date is: ${destructuredDateArr}`);
-      //console.log(`date startTime: ${destDateArrStartTime[0]}`);
-      const dateToFormat =
-        destructuredDateArr[1] + " " + destDateArrStartTime[0];
-      //console.log(`this is the date to format:  ${dateToFormat}`);
-      //extract the date from the title
-      //take the last item in the array(the date) save to a variable and pass it to the date formater
-      //const eventDayDate = destructuredDateArr[1];
-      //console.log(eventDayDate);
-      //const eventMntYrTymDate = destructuredDateArr[2];
-      //console.log(eventMntYrTymDate);
+        // Parse the date: format like "Sa. 10. Mai 2026 09:00 - 17:00"
+        const parts = dateElement.split(". ");
+        if (parts.length < 3) {
+          console.log("ADFC scraper: unexpected date format: " + dateElement);
+          await eventPage.close();
+          continue;
+        }
+        const timeParts = parts[2].split(" - ");
+        const dateToFormat = parts[1] + ". " + timeParts[0];
+        const parsedMoment = moment(dateToFormat, "DD. MMMM YYYY HH:mm", "de");
+        if (!parsedMoment.isValid()) {
+          console.log("ADFC scraper: could not parse date: " + dateToFormat);
+          await eventPage.close();
+          continue;
+        }
+        const formatedDate = parsedMoment.toISOString();
+        const endDate = moment(formatedDate).add(2, "h").toISOString();
 
-      //reformat the date here
+        let imgElement = "";
+        try {
+          await eventPage.waitForSelector("img.pswp__img", { visible: true, timeout: 5000 });
+          imgElement = await eventPage.evaluate(() => {
+            const imgs = document.querySelectorAll("img.pswp__img");
+            return Array.from(imgs).map((v) => v.src)[0] || "";
+          });
+        } catch (_) {
+          // Image is optional
+        }
 
-      //format the evetn date! use moment?
+        const found = await Event.findOne({ title: titleEl, start: formatedDate });
+        if (found) {
+          console.log("ADFC: event already exists - " + titleEl);
+          await eventPage.close();
+          continue;
+        }
 
-      const formatedDate =
-        moment(dateToFormat, "DD.MMMM.YYYY HH:mm").format() !== "Invalid date"
-          ? moment(dateToFormat, "DD.MMMM.YYYY HH:mm").format()
-          : moment(dateToFormat, "DD.MMMM.YYYY HH:mm").format();
-
-      console.log(`THE FORMATED DATE IS : ${formatedDate}`);
-      // add 2 hours to the formated date to create the endDate
-      const endDate = moment(formatedDate).add(2, "h");
-
-      console.log("end:", endDate);
-
-      //scrape the image links from the main events page the same way as the links
-      await eventPage.waitForSelector("img.pswp__img", { visible: true });
-      await eventPage.screenshot({ path: "1.png" });
-      const imgElement = await eventPage.evaluate(() => {
-        const selectImgElement = document.querySelectorAll("img.pswp__img");
-        const imgUrls = Array.from(selectImgElement).map((v) => v.src);
-        return imgUrls[0];
-      });
-      console.log(`THIS IS THE IMAGE URL: ${imgElement}`);
-
-      // check if there is an event already in the DB title && date
-
-      const found = await Event.findOne({
-        title: titleEl,
-        start: formatedDate,
-      });
-      if (found) {
-        console.log("Event already exists");
-        continue;
+        const newEvent = await Event.create({
+          title: titleEl,
+          start: formatedDate,
+          end: endDate,
+          link: fullEventLink,
+          imgLink: imgElement,
+        });
+        console.log("ADFC: new event created - " + newEvent._id);
+      } catch (err) {
+        console.error("ADFC scraper: error on " + fullEventLink + ": " + err.message);
       }
-
-      // save the event link, title, imglink, and date intoa mongoose object and save to mongo
-      const newEvent = await Event.create({
-        title: titleEl,
-        start: formatedDate,
-        end: endDate,
-        link: fullEventLink,
-        imgLink: imgElement,
-      });
-
-      console.log(`New event created with id ${newEvent._id}`);
-      return;
+      await eventPage.close();
     }
-    browser.close();
-    return;
   } catch (err) {
-    console.log(err);
+    console.error("ADFC scraper error: " + err.message);
+  } finally {
+    if (browser) await browser.close();
   }
 }
-const now = moment(new Date()).format("YYYY/MM/DD");
-console.log(now);
-scrapeAllEvents(
-  `https://touren-termine.adfc.de/suche?beginning=${now}&eventType=Radtour&includeSubsidiary=true&unitKey=154`
-);
 
 module.exports = scrapeAllEvents;

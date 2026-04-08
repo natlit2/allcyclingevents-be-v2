@@ -1,91 +1,70 @@
-const puppeteer = require("puppeteer");
+// Critical Mass Berlin scraper
+// Uses the free criticalmass.in REST API - no browser/puppeteer needed
+const https = require("https");
 const Event = require("../models/eventModel");
 const connectDB = require("../dbinit");
-const moment = require("moment");
 
-async function scrapeEvent(url) {
-  connectDB();
-  const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  try {
-    await page.goto(url);
-    await page.waitForSelector(".container", { visible: true });
-    await page.screenshot({ path: "cm.png" });
-    console.log("the page is up");
-
-    ////to get 1 specific link
-    const linkSelector = await page.waitForXPath(
-      "/html/body/div[3]/div[2]/div[2]/div[2]/div/div/div[2]/div[1]/div/div/a"
-    );
-    const eventLink = await linkSelector.getProperty("href");
-    const link = await eventLink.toString();
-    console.log(`the event link: ${link}`);
-
-    // const Urls = Array.from(eventLink).map((el) => el.href);
-    // console.log(`the event link is: ${Urls}`);
-
-    //scrape the image link
-    const imglinkSelector =
-      "body > div:nth-child(4) > div:nth-child(3) > div.col-md-9 > div:nth-child(3) > div > div:nth-child(7) > div > a > img";
-    const imgLink = await page.$eval(imglinkSelector, (el) => el.src);
-    console.log(`IMAGE LINK IS: ${imgLink}`);
-
-    //scrape the date element
-    const [dateElement] = await page.$x(
-      "/html/body/div[3]/div[2]/div[2]/div[2]/div/div/div[2]/div[2]/div[1]/dl/dd"
-    );
-    const datetime = await dateElement.getProperty("textContent");
-    const eventDate = await datetime.jsonValue();
-    console.log(`THE EVENT DATE IS: ${eventDate}`);
-
-    // //format the date
-
-    // const formatDate = (str) => {
-    //   const toArr = str.split(".");
-    //   return `${toArr[2]}-${toArr[1]}-${toArr[0].replace(".", "")}`;
-    // };
-
-    //format the evetn date! use moment?
-    const formatedDate = moment(eventDate, "DD.MM.YYYY").format();
-    console.log(`THE FORMATED DATE IS : ${formatedDate}`);
-
-    // // add 2 hours to the formated date to create the endDate
-    const endDate = moment(formatedDate).add(2, "h");
-
-    console.log("end:", endDate);
-
-    //for await (const eventLink of eventLinks) {
-
-    //scrape the title
-    const [titleElement] = await page.$x(
-      "/html/body/div[3]/div[2]/div[2]/div[2]/div/div/div[2]/div[1]/div/div/a/h3/text()"
-    );
-    const txt = await titleElement.getProperty("textContent");
-    const eventTitle = await txt.jsonValue();
-
-    console.log(`THE EVENT TITLE IS: ${eventTitle}`);
-
-    // // check if there is an event already in the DB title && date
-    const found = await Event.findOne({
-      title: eventTitle,
-      start: formatedDate,
-    });
-    if (found) return console.log("Event already exists");
-
-    const newEvent = await Event.create({
-      title: eventTitle,
-      start: formatedDate,
-      end: endDate,
-      link: link,
-      imgLink: imgLink,
-    });
-    console.log(`New event created with id ${newEvent._id}`);
-  } catch (err) {
-    console.log(`Oooops...there was an Error on the event page: ${err}`);
-  }
-  browser.close();
-  //return;
+function fetchJSON(url) {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, { headers: { Accept: "application/json" } }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(new Error(`JSON parse error: ${e.message}`));
+          }
+        });
+      })
+      .on("error", reject);
+  });
 }
-scrapeEvent("https://criticalmass.in/berlin/");
 
-module.exports = scrapeEvent;
+async function scrapeCriticalMass() {
+  await connectDB();
+  try {
+    console.log("Critical Mass scraper: fetching from API...");
+    const rides = await fetchJSON("https://criticalmass.in/api/ride?city=berlin");
+
+    if (!Array.isArray(rides)) {
+      console.log("Critical Mass API: unexpected response format");
+      return;
+    }
+
+    const now = new Date();
+    const upcoming = rides.filter((r) => r.dateTime && new Date(r.dateTime) >= now);
+    console.log(`Critical Mass scraper: ${upcoming.length} upcoming rides found`);
+
+    for (const ride of upcoming) {
+      const title = ride.title || "Critical Mass Berlin";
+      const startDate = new Date(ride.dateTime);
+      // Critical Mass rides typically last 3 hours
+      const endDate = new Date(startDate.getTime() + 3 * 60 * 60 * 1000);
+      const dateStr = startDate.toISOString().split("T")[0];
+      const link = `https://criticalmass.in/berlin/${dateStr}`;
+      // Official Berlin Critical Mass city image
+      const imgLink = "https://criticalmass.in/build/images/cities/berlin.jpg";
+
+      const found = await Event.findOne({ title, start: startDate });
+      if (found) {
+        console.log(`Critical Mass: event already exists - ${title} on ${dateStr}`);
+        continue;
+      }
+
+      const newEvent = await Event.create({
+        title,
+        start: startDate,
+        end: endDate,
+        link,
+        imgLink,
+      });
+      console.log(`Critical Mass: new event created - ${newEvent._id} (${title})`);
+    }
+  } catch (err) {
+    console.error(`Critical Mass scraper error: ${err.message}`);
+  }
+}
+
+module.exports = scrapeCriticalMass;

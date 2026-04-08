@@ -1,23 +1,15 @@
 {
-  "name": "allcyclingevents-be",
-  "version": "1.0.0",
-  "description": "scraper with puppeteer",
-  "main": "index.js",
+  "name": "allcyclingevents-be-refactored",
+  "version": "2.0.0",
+  "description": "Berlin cycling events aggregator - scrapes events from multiple sources",
+  "main": "server.js",
   "scripts": {
-    "test": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/natlit2/allcyclingevents-be.git"
-  },
-  "keywords": [],
+  "keywords": ["cycling", "berlin", "events", "scraper"],
   "author": "",
   "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/natlit2/allcyclingevents-be/issues"
-  },
-  "homepage": "https://github.com/natlit2/allcyclingevents-be#readme",
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.0.1",

@@ -1,25 +1,36 @@
-// import adfcScraper from "./scrapers/newAdfcScraper";
-// import cmScraper from "./scrapers/CMscraper";
-// import eventBriteScraper from "./scrapers/eventbriteScraper";
-// import mellowParkScraper from "./scrapers/newMellowParkScraper";
+// Scrapers scheduler - runs all scrapers once at startup and then daily at 12:00 UTC
+const schedule = require("node-schedule");
 
 const adfcScraper = require("./scrapers/newAdfcScraper");
 const cmScraper = require("./scrapers/CMscraper");
-const eventBriteScraper = require("./scrapers/eventbriteScraper");
+const fahrradtermineScraper = require("./scrapers/eventbriteScraper"); // renamed purpose
 const mellowParkScraper = require("./scrapers/newMellowParkScraper");
 
-const schedule = require("node-schedule");
+// Run all scrapers in sequence, catching errors so one failure doesn't stop others
+async function runAllScrapers() {
+  console.log("=== Starting all scrapers ===");
+  try { await cmScraper(); } catch (e) { console.error("CMscraper failed:", e.message); }
+  try { await fahrradtermineScraper(); } catch (e) { console.error("Fahrradtermine scraper failed:", e.message); }
+  try { await adfcScraper(); } catch (e) { console.error("ADFC scraper failed:", e.message); }
+  try { await mellowParkScraper(); } catch (e) { console.error("MellowPark scraper failed:", e.message); }
+  console.log("=== All scrapers finished ===");
+}
 
+// Run once immediately when the server starts
+runAllScrapers();
+
+// Then schedule to run daily at 12:00 UTC
 const rule = new schedule.RecurrenceRule();
 rule.hour = 12;
+rule.minute = 0;
 
-const job = schedule.scheduleJob(rule, function () {
-  console.log("The answer to life, the universe, and everything!");
-  adfcScraper();
-  cmScraper();
-  eventBriteScraper();
-  mellowParkScraper();
-  return job;
+const job = schedule.scheduleJob(rule, () => {
+  console.log("Scheduled scraper run starting...");
+  runAllScrapers();
 });
-schedule.gracefulShutdown();
+
+// Graceful shutdown on process exit (not on startup)
+process.on("SIGTERM", () => schedule.gracefulShutdown());
+process.on("SIGINT", () => schedule.gracefulShutdown());
+
 module.exports = schedule;
