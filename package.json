@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "echo \"No tests defined\" && exit 0"
   },
   "keywords": ["cycling", "berlin", "events", "scraper"],
   "author": "",
