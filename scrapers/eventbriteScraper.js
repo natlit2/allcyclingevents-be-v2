@@ -6,6 +6,23 @@ const connectDB = require("../dbinit");
 
 const BASE_URL = "https://fahrradtermine-berlin.de";
 
+// Extract the first external URL from HTML description, ignoring the aggregator itself
+function extractExternalUrl(html) {
+  if (!html) return null;
+  const matches = html.match(/href=["']([^"'\s]+)["']/gi);
+  if (!matches) return null;
+  for (const match of matches) {
+    const url = match.replace(/href=["']/i, "").replace(/["']$/, "");
+    if (
+      url.startsWith("http") &&
+      !url.includes("fahrradtermine-berlin.de")
+    ) {
+      return url;
+    }
+  }
+  return null;
+}
+
 function fetchJSON(url) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { Accept: "application/json" } }, (res) => {
@@ -40,8 +57,8 @@ async function scrapeFahrradtermine() {
         ? new Date(ev.end_datetime * 1000)
         : new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
 
-      // Event page URL: /event/[slug]
-      const link = BASE_URL + "/event/" + (ev.slug || ev.id);
+      // Use official URL from description, never link back to the aggregator
+      const link = extractExternalUrl(ev.description) || "";
 
       // Image URL: /media/[filename] 
       let imgLink = "";
