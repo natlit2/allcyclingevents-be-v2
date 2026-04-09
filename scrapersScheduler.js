@@ -3,8 +3,9 @@ const schedule = require("node-schedule");
 
 const adfcScraper = require("./scrapers/newAdfcScraper");
 const cmScraper = require("./scrapers/CMscraper");
-const fahrradtermineScraper = require("./scrapers/eventbriteScraper"); // renamed purpose
+const fahrradtermineScraper = require("./scrapers/eventbriteScraper");
 const mellowParkScraper = require("./scrapers/newMellowParkScraper");
+const veloBerlinScraper = require("./scrapers/veloBerlinScraper");
 
 // Run all scrapers in sequence, catching errors so one failure doesn't stop others
 async function runAllScrapers() {
@@ -13,6 +14,7 @@ async function runAllScrapers() {
   try { await fahrradtermineScraper(); } catch (e) { console.error("Fahrradtermine scraper failed:", e.message); }
   try { await adfcScraper(); } catch (e) { console.error("ADFC scraper failed:", e.message); }
   try { await mellowParkScraper(); } catch (e) { console.error("MellowPark scraper failed:", e.message); }
+  try { await veloBerlinScraper(); } catch (e) { console.error("VeloBerlin scraper failed:", e.message); }
   console.log("=== All scrapers finished ===");
 }
 
