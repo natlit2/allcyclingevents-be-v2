@@ -6,6 +6,14 @@ const connectDB = require("../dbinit");
 
 const BASE_URL = "https://fahrradtermine-berlin.de";
 
+// Fallback links for known recurring events with no external URL in description
+const KNOWN_LINKS = {
+  "Critical Mass Berlin": "https://criticalmass.in/berlin",
+  "Critical Mass Potsdam": "https://criticalmass.in/potsdam",
+  "Kidical Mass Tempelhof": "https://kidical-mass.de",
+  "Kidical Mass": "https://kidical-mass.de",
+};
+
 // Extract the first external URL from HTML description, ignoring the aggregator itself
 function extractExternalUrl(html) {
   if (!html) return null;
@@ -57,8 +65,8 @@ async function scrapeFahrradtermine() {
         ? new Date(ev.end_datetime * 1000)
         : new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
 
-      // Use official URL from description, never link back to the aggregator
-      const link = extractExternalUrl(ev.description) || "";
+      // Use official URL from description, fall back to known links, never use aggregator URL
+      const link = extractExternalUrl(ev.description) || KNOWN_LINKS[title] || "";
 
       // Image URL: /media/[filename] 
       let imgLink = "";
