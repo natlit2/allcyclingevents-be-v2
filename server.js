@@ -15,6 +15,10 @@ app.get("/", (req, res) => {
   res.send("Allcyclingevents-berlin server is up and running!");
 });
 
+app.get("/ping", (req, res) => {
+  res.json({ status: "ok", time: new Date().toISOString() });
+});
+
 app.use((err, req, res, next) => {
   console.error(err.message);
   res.status(500).json({ error: "Internal Server Error" });
