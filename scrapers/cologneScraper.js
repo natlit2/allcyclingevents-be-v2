@@ -1,54 +1,55 @@
 // Cologne cycling events scraper
-// Sources:
-//   1. Critical Mass Cologne — computed dates (last Friday of each month, 18:00, Rudolfplatz)
-//   2. ADFC Cologne — REST API (unitKey 164090), no Puppeteer needed
-const https = require("https");
+// Source: Critical Mass Cologne — last Friday of each month at 18:00 Berlin local time, Rudolfplatz
 const Event = require("../models/eventModel");
 const connectDB = require("../dbinit");
 const moment = require("moment");
 
 const CITY = "Cologne";
 
-function fetchJSON(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, { headers: { Accept: "application/json" } }, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error("JSON parse error: " + e.message)); }
-      });
-    }).on("error", reject);
-  });
-}
-
-async function saveEvent({ title, start, end, link, imgLink }) {
-  const found = await Event.findOne({ title, start, city: CITY });
+async function saveEvent({ title, start, end, link }) {
+  // Dedup by title + calendar day + city (avoids timezone duplicate issues)
+  const dateKey = moment(start).utc().format("YYYY-MM-DD");
+  const dayStart = new Date(dateKey + "T00:00:00.000Z");
+  const dayEnd   = new Date(dateKey + "T23:59:59.999Z");
+  const found = await Event.findOne({ title, city: CITY, start: { $gte: dayStart, $lte: dayEnd } });
   if (found) {
-    console.log(`Cologne: already exists - ${title}`);
+    console.log(`Cologne: already exists - ${title} on ${dateKey}`);
     return;
   }
-  const ev = await Event.create({ title, start, end, link: link || "", imgLink: imgLink || "", city: CITY });
-  console.log(`Cologne: created - ${ev._id} | ${title}`);
+  const ev = await Event.create({ title, start, end, link, imgLink: "", city: CITY });
+  console.log(`Cologne: created - ${ev._id} | ${title} | ${dateKey}`);
 }
 
-// Critical Mass Cologne — last Friday of each month at 18:00 at Rudolfplatz
+// Last Friday of each month at 18:00 Berlin local time
+// Berlin is UTC+1 in winter, UTC+2 in summer (CET/CEST)
 function getCriticalMassDates() {
   const dates = [];
   const now = new Date();
   for (let monthOffset = 0; monthOffset <= 6; monthOffset++) {
-    const lastDay = moment().add(monthOffset, "months").endOf("month");
-    while (lastDay.day() !== 5) lastDay.subtract(1, "day"); // find last Friday
-    lastDay.set({ hour: 18, minute: 0, second: 0, millisecond: 0 });
-    if (lastDay.toDate() >= now) dates.push(lastDay.toDate());
+    const m = moment().add(monthOffset, "months").startOf("month");
+    const lastDay = m.clone().endOf("month");
+    while (lastDay.day() !== 5) lastDay.subtract(1, "day");
+
+    // Determine UTC offset for Berlin: CEST (UTC+2) Mar–Oct, CET (UTC+1) Nov–Feb
+    const month = lastDay.month(); // 0-indexed
+    const isSummer = month >= 2 && month <= 9;
+    const utcOffsetHours = isSummer ? 2 : 1;
+
+    // 18:00 Berlin = 18:00 - offset in UTC
+    const utcHour = 18 - utcOffsetHours;
+    const dateStr = lastDay.format("YYYY-MM-DD");
+    const startUTC = new Date(`${dateStr}T${String(utcHour).padStart(2,"0")}:00:00.000Z`);
+
+    if (startUTC >= now) dates.push(startUTC);
   }
   return dates;
 }
 
-async function saveCriticalMassCologne() {
-  console.log("Cologne: computing Critical Mass dates...");
+async function scrapeCologne() {
+  await connectDB();
+  console.log("Cologne scraper: computing Critical Mass dates...");
   const dates = getCriticalMassDates();
-  console.log(`Cologne: ${dates.length} upcoming Critical Mass dates`);
+  console.log(`Cologne scraper: ${dates.length} upcoming Critical Mass dates`);
   for (const start of dates) {
     const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
     await saveEvent({
@@ -56,51 +57,8 @@ async function saveCriticalMassCologne() {
       start,
       end,
       link: "https://criticalmass.in/koln",
-      imgLink: "",
     });
   }
-}
-
-// ADFC Cologne — REST API, returns guided bike tours for unitKey 164090
-async function scrapeAdfcCologne() {
-  console.log("Cologne ADFC: fetching events from API...");
-  try {
-    const url = "https://api-touren-termine.adfc.de/api/eventItems/search?unitKey=164090&fromNow=true&eventType=Radtour&pageSize=100";
-    const data = await fetchJSON(url);
-
-    // API may return array directly or { items: [...] } or { data: [...] }
-    const items = Array.isArray(data)
-      ? data
-      : data.items || data.data || data.eventItems || [];
-
-    console.log(`Cologne ADFC: ${items.length} events in response`);
-    const now = new Date();
-
-    for (const ev of items) {
-      if (!ev.title || !ev.beginning) continue;
-      const start = new Date(ev.beginning);
-      if (isNaN(start.getTime()) || start < now) continue;
-      const end = ev.end ? new Date(ev.end) : new Date(start.getTime() + 2 * 60 * 60 * 1000);
-      const link = ev.cSlug
-        ? `https://touren-termine.adfc.de/radveranstaltung/${ev.cSlug}`
-        : "https://touren-termine.adfc.de";
-      await saveEvent({
-        title: ev.title,
-        start,
-        end,
-        link,
-        imgLink: ev.imageUrl || "",
-      });
-    }
-  } catch (err) {
-    console.error("Cologne ADFC error: " + err.message);
-  }
-}
-
-async function scrapeCologne() {
-  await connectDB();
-  await saveCriticalMassCologne();
-  await scrapeAdfcCologne();
   console.log("Cologne scraper: done.");
 }
 
