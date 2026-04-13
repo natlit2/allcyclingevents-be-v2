@@ -1,8 +1,9 @@
 // Hamburg cycling events scraper
-// Source: Critical Mass Hamburg — last Friday of each month at 18:30 Berlin local time
+// Sources: Critical Mass Hamburg (computed) + ADFC Hamburg (unitKey 158, Puppeteer)
 const Event = require("../models/eventModel");
 const connectDB = require("../dbinit");
 const moment = require("moment");
+const scrapeAdfcCity = require("./adfcScrapeHelper");
 
 const CITY = "Hamburg";
 
@@ -60,6 +61,7 @@ async function scrapeHamburg() {
       link: "https://criticalmass.in/hamburg",
     });
   }
+  await scrapeAdfcCity({ unitKey: 158, city: "Hamburg", label: "ADFC Hamburg" });
   console.log("Hamburg scraper: done.");
 }
 

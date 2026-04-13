@@ -1,8 +1,9 @@
 // Cologne cycling events scraper
-// Source: Critical Mass Cologne — last Friday of each month at 18:00 Berlin local time, Rudolfplatz
+// Sources: Critical Mass Cologne (computed) + ADFC Cologne (unitKey 164090, Puppeteer)
 const Event = require("../models/eventModel");
 const connectDB = require("../dbinit");
 const moment = require("moment");
+const scrapeAdfcCity = require("./adfcScrapeHelper");
 
 const CITY = "Cologne";
 
@@ -59,6 +60,7 @@ async function scrapeCologne() {
       link: "https://criticalmass.in/koln",
     });
   }
+  await scrapeAdfcCity({ unitKey: 164090, city: "Cologne", label: "ADFC Cologne" });
   console.log("Cologne scraper: done.");
 }
 
