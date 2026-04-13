@@ -50,10 +50,10 @@ async function scrapeAllEvents() {
       const fullEventLink = baseURL + eventLink;
       const eventPage = await browser.newPage();
       try {
-        await eventPage.setDefaultNavigationTimeout(60000);
-        await eventPage.goto(fullEventLink, { waitUntil: "networkidle2" });
+        await eventPage.setDefaultNavigationTimeout(8000);
+        await eventPage.goto(fullEventLink, { waitUntil: "domcontentloaded", timeout: 8000 });
 
-        await eventPage.waitForSelector("h1", { visible: true, timeout: 15000 });
+        await eventPage.waitForSelector("h1", { visible: true, timeout: 5000 });
         const titleEl = await eventPage.evaluate(() => {
           const el = document.querySelector("h1");
           return el ? el.innerText.trim() : null;
