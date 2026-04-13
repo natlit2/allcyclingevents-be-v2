@@ -86,6 +86,7 @@ async function scrapeVeloBerlin() {
         end: endDate,
         link: ev.link,
         imgLink: ev.imgLink,
+        city: "Berlin",
       });
       console.log("VeloBerlin: created - " + newEvent._id + " | " + ev.title);
     }

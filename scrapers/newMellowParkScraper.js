@@ -149,6 +149,7 @@ async function scrapeAllEvents() {
           end: endDate,
           link: eventLink,
           imgLink: imgLink,
+          city: "Berlin",
         });
         console.log("Mellow Park: new event created - " + newEvent._id);
       } catch (err) {

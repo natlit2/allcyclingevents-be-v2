@@ -118,6 +118,7 @@ async function scrapeAllEvents() {
           end: endDate,
           link: fullEventLink,
           imgLink: imgElement,
+          city: "Berlin",
         });
         console.log("ADFC: new event created - " + newEvent._id);
       } catch (err) {

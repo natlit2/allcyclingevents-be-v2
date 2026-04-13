@@ -2,9 +2,9 @@ const Event = require("../models/eventModel");
 const connectDB = require("../dbinit");
 //import your scraper
 const getAllEvents = async (req, res) => {
-  //first scrape
   try {
-    const events = await Event.find();
+    const city = req.query.city || "Berlin";
+    const events = await Event.find({ city });
     res.status(200).json({
       Events: events,
     });

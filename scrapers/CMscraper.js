@@ -59,6 +59,7 @@ async function scrapeCriticalMass() {
         end: endDate,
         link,
         imgLink,
+        city: "Berlin",
       });
       console.log(`Critical Mass: new event created - ${newEvent._id} (${title})`);
     }

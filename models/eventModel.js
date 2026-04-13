@@ -19,6 +19,10 @@ const EventSchema = new mongoose.Schema({
   imgLink: {
     type: String,
   },
+  city: {
+    type: String,
+    default: "Berlin",
+  },
 });
 
 const Event = mongoose.model("Event", EventSchema);

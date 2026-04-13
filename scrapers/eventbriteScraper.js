@@ -81,7 +81,7 @@ async function scrapeFahrradtermine() {
         continue;
       }
 
-      const newEvent = await Event.create({ title, start: startDate, end: endDate, link, imgLink });
+      const newEvent = await Event.create({ title, start: startDate, end: endDate, link, imgLink, city: "Berlin" });
       console.log("Fahrradtermine: created - " + newEvent._id + " | img: " + imgLink);
     }
   } catch (err) {

@@ -136,6 +136,7 @@ async function scrapeEvent(url) {
       end: endDate,
       link: eventLink,
       imgLink: imgLink,
+      city: "Berlin",
     });
     console.log(`New event created with id ${newEvent._id}`);
   } catch (err) {
