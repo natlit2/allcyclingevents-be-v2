@@ -11,6 +11,8 @@ const ADFC_URL = () => {
   return `https://touren-termine.adfc.de/suche?beginning=${now}&eventType=Radtour&includeSubsidiary=true&unitKey=154`;
 };
 
+const BASE_URL = "https://touren-termine.adfc.de";
+
 // Windows-compatible puppeteer launch options
 const PUPPETEER_OPTS = {
   headless: true,
@@ -34,97 +36,92 @@ async function scrapeAllEvents() {
 
     await page.waitForSelector(".list-group", { visible: true, timeout: 30000 });
 
-    const eventLinks = await page.evaluate(() => {
-      const listGroup = document.querySelectorAll(".list-group a");
-      const links = [];
-      for (const link of listGroup) {
-        links.push(link.getAttribute("href"));
+    // Extract all event data directly from the listing page
+    const events = await page.evaluate((baseURL) => {
+      const items = document.querySelectorAll(".list-group-item");
+      const results = [];
+      for (const item of items) {
+        const linkEl = item.querySelector("a");
+        const href = linkEl ? linkEl.getAttribute("href") : null;
+        if (!href) continue;
+
+        // Title: try h4, h5, strong, or fallback to link text
+        const titleEl =
+          item.querySelector("h4") ||
+          item.querySelector("h5") ||
+          item.querySelector(".list-group-item-heading") ||
+          item.querySelector("strong") ||
+          linkEl;
+        const title = titleEl ? titleEl.innerText.trim() : null;
+        if (!title) continue;
+
+        // Date: look for a dd or a .list-group-item-text or any element with date-like text
+        let dateText = null;
+        const dds = item.querySelectorAll("dd");
+        if (dds.length > 1) {
+          dateText = dds[1].innerText.trim();
+        } else if (dds.length === 1) {
+          dateText = dds[0].innerText.trim();
+        } else {
+          // Try any small/span/p that looks like a date
+          const texts = item.querySelectorAll("small, .list-group-item-text, p, span");
+          for (const t of texts) {
+            const txt = t.innerText.trim();
+            if (/\d{1,2}\.\s*\w+\s*\d{4}/.test(txt)) {
+              dateText = txt;
+              break;
+            }
+          }
+        }
+
+        results.push({
+          title,
+          dateText,
+          link: baseURL + href,
+        });
       }
-      return links;
-    });
+      return results;
+    }, BASE_URL);
 
-    console.log("ADFC scraper: found " + eventLinks.length + " event links");
+    console.log("ADFC scraper: found " + events.length + " events on listing page");
 
-    for (const eventLink of eventLinks) {
-      const baseURL = "https://touren-terme.adfc.de";
-      const fullEventLink = baseURL + eventLink;
-      const eventPage = await browser.newPage();
-      try {
-        await eventPage.setDefaultNavigationTimeout(8000);
-        await eventPage.goto(fullEventLink, { waitUntil: "domcontentloaded", timeout: 8000 });
-
-        await eventPage.waitForSelector("h1", { visible: true, timeout: 5000 });
-        const titleEl = await eventPage.evaluate(() => {
-          const el = document.querySelector("h1");
-          return el ? el.innerText.trim() : null;
-        });
-        if (!titleEl) {
-          console.log("ADFC scraper: no title found, skipping");
-          await eventPage.close();
-          continue;
-        }
-        console.log("ADFC: title = " + titleEl);
-
-        const dateElement = await eventPage.evaluate(() => {
-          const dds = document.querySelectorAll("dd");
-          return dds[1] ? dds[1].innerText.trim() : null;
-        });
-        if (!dateElement) {
-          console.log("ADFC scraper: no date found, skipping");
-          await eventPage.close();
-          continue;
-        }
-        console.log("ADFC: date = " + dateElement);
-
-        // Parse the date: format like "Sa. 10. Mai 2026 09:00 - 17:00"
-        const parts = dateElement.split(". ");
-        if (parts.length < 3) {
-          console.log("ADFC scraper: unexpected date format: " + dateElement);
-          await eventPage.close();
-          continue;
-        }
-        const timeParts = parts[2].split(" - ");
-        const dateToFormat = parts[1] + ". " + timeParts[0];
-        const parsedMoment = moment(dateToFormat, "DD. MMMM YYYY HH:mm", "de");
-        if (!parsedMoment.isValid()) {
-          console.log("ADFC scraper: could not parse date: " + dateToFormat);
-          await eventPage.close();
-          continue;
-        }
-        const formatedDate = parsedMoment.toISOString();
-        const endDate = moment(formatedDate).add(2, "h").toISOString();
-
-        let imgElement = "";
-        try {
-          await eventPage.waitForSelector("img.pswp__img", { visible: true, timeout: 5000 });
-          imgElement = await eventPage.evaluate(() => {
-            const imgs = document.querySelectorAll("img.pswp__img");
-            return Array.from(imgs).map((v) => v.src)[0] || "";
-          });
-        } catch (_) {
-          // Image is optional
-        }
-
-        const found = await Event.findOne({ title: titleEl, start: formatedDate });
-        if (found) {
-          console.log("ADFC: event already exists - " + titleEl);
-          await eventPage.close();
-          continue;
-        }
-
-        const newEvent = await Event.create({
-          title: titleEl,
-          start: formatedDate,
-          end: endDate,
-          link: fullEventLink,
-          imgLink: imgElement,
-          city: "Berlin",
-        });
-        console.log("ADFC: new event created - " + newEvent._id);
-      } catch (err) {
-        console.error("ADFC scraper: error on " + fullEventLink + ": " + err.message);
+    for (const ev of events) {
+      if (!ev.dateText) {
+        console.log("ADFC scraper: no date for '" + ev.title + "', skipping");
+        continue;
       }
-      await eventPage.close();
+
+      // Parse date: format like "Sa. 10. Mai 2026 09:00 - 17:00"
+      const parts = ev.dateText.split(". ");
+      if (parts.length < 3) {
+        console.log("ADFC scraper: unexpected date format: " + ev.dateText);
+        continue;
+      }
+      const timeParts = parts[2].split(" - ");
+      const dateToFormat = parts[1] + ". " + timeParts[0];
+      const parsedMoment = moment(dateToFormat, "DD. MMMM YYYY HH:mm", "de");
+      if (!parsedMoment.isValid()) {
+        console.log("ADFC scraper: could not parse date: " + dateToFormat);
+        continue;
+      }
+      const formatedDate = parsedMoment.toISOString();
+      const endDate = moment(formatedDate).add(2, "h").toISOString();
+
+      const found = await Event.findOne({ title: ev.title, start: formatedDate });
+      if (found) {
+        console.log("ADFC: event already exists - " + ev.title);
+        continue;
+      }
+
+      const newEvent = await Event.create({
+        title: ev.title,
+        start: formatedDate,
+        end: endDate,
+        link: ev.link,
+        imgLink: "",
+        city: "Berlin",
+      });
+      console.log("ADFC: new event created - " + newEvent._id);
     }
   } catch (err) {
     console.error("ADFC scraper error: " + err.message);
