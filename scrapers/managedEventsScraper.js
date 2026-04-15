@@ -11,6 +11,16 @@ const connectDB = require("../dbinit");
 // All times stored as UTC. Berlin is UTC+2 in summer (Mar–Oct), UTC+1 in winter.
 // Events below use local Berlin time converted to UTC manually.
 const MANAGED_EVENTS = [
+  // ─── BERLIN ─────────────────────────────────────────────────────────────────
+  {
+    title: "Rewind Cycles Bazaar 2026",
+    start: new Date("2026-04-15T10:00:00.000Z"), // 12:00 Berlin (UTC+2)
+    end:   new Date("2026-04-15T16:00:00.000Z"), // 18:00 Berlin (UTC+2)
+    city:  "Berlin",
+    link:  "https://www.facebook.com/rewindcycles/",
+    imgLink: "https://cdn.prod.website-files.com/6050d741564621d2aa48c91c/642e7cbef54a03c20e0fa623_WhatsApp%20Image%202023-04-06%20at%2010.02.49.jpg",
+  },
+
   // ─── HAMBURG ────────────────────────────────────────────────────────────────
   {
     title: "Hamburg Sternfahrt 2026",
