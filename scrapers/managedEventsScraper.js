@@ -13,12 +13,20 @@ const connectDB = require("../dbinit");
 const MANAGED_EVENTS = [
   // ─── BERLIN ─────────────────────────────────────────────────────────────────
   {
-    title: "Rewind Cycles Bazaar 2026",
-    start: new Date("2026-04-15T10:00:00.000Z"), // 12:00 Berlin (UTC+2)
-    end:   new Date("2026-04-15T16:00:00.000Z"), // 18:00 Berlin (UTC+2)
+    title: "Rewind Cycles Bazaar @ Berta Block, Mühlenstraße 62",
+    start: new Date("2026-05-16T10:00:00.000Z"), // 12:00 Berlin (UTC+2)
+    end:   new Date("2026-05-16T16:00:00.000Z"), // 18:00 Berlin (UTC+2)
     city:  "Berlin",
-    link:  "https://www.facebook.com/rewindcycles/",
-    imgLink: "https://cdn.prod.website-files.com/6050d741564621d2aa48c91c/642e7cbef54a03c20e0fa623_WhatsApp%20Image%202023-04-06%20at%2010.02.49.jpg",
+    link:  "https://www.instagram.com/p/DVnuP4firSP/",
+    imgLink: "",
+  },
+  {
+    title: "Rewind Cycles — Berta Block Boulderhalle, Mühlenstraße 62",
+    start: new Date("2026-05-17T10:00:00.000Z"), // 12:00 Berlin (UTC+2)
+    end:   new Date("2026-05-17T16:00:00.000Z"), // 18:00 Berlin (UTC+2)
+    city:  "Berlin",
+    link:  "https://www.instagram.com/rewindcycles_official/",
+    imgLink: "",
   },
 
   // ─── HAMBURG ────────────────────────────────────────────────────────────────
